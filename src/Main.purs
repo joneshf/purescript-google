@@ -9,9 +9,10 @@ import Control.Monad.Eff.Exception (EXCEPTION)
 import Data.Argonaut.Decode.Class (class DecodeJson)
 import Data.Argonaut.Decode.Generic.Rep (genericDecodeJson)
 import Data.Generic.Rep (class Generic)
+import Data.Maybe (Maybe(..))
 import Network.HTTP.Affjax (AJAX)
 import Type.Proxy (Proxy(..))
-import Type.Trout (type (:/), type (:>), Capture, Resource)
+import Type.Trout (type (:/), type (:>), Capture, QueryParam, Resource)
 import Type.Trout.Client (asClients)
 import Type.Trout.ContentType.JSON (JSON)
 import Type.Trout.Method (Get)
@@ -19,7 +20,7 @@ import Type.Trout.PathPiece (class ToPathPiece)
 
 main :: forall e. Eff ( ajax :: AJAX, exception :: EXCEPTION, console :: CONSOLE | e) Unit
 main = void do
-  let messages = foo (UserId "me") (MessageId "0")
+  let messages = foo (UserId "me") (MessageId "0") Nothing
   launchAff messages."GET"
 
 newtype UserId
@@ -56,15 +57,28 @@ derive instance genericMessage :: Generic Message _
 instance decodeJsonMessage :: DecodeJson Message where
   decodeJson = genericDecodeJson
 
+data Format
+  = Full
+  | Metadata
+  | Minimal
+  | Raw
+
+instance toPathPieceFormat :: ToPathPiece Format where
+  toPathPiece Full = "full"
+  toPathPiece Metadata = "metadata"
+  toPathPiece Minimal = "minimal"
+  toPathPiece Raw = "raw"
+
 type API
   = "https://www.googleapis.com/gmail/v1/users"
     :/ Capture "userId" UserId
     :> "messages"
     :/ Capture "id" MessageId
+    :> QueryParam "format" Format
     :> Resource (Get Message JSON)
 
 api :: Proxy API
 api = Proxy
 
-foo :: forall e. UserId -> MessageId -> { "GET" :: Aff ( ajax :: AJAX | e ) Message }
+foo :: forall e. UserId -> MessageId -> Maybe Format -> { "GET" :: Aff ( ajax :: AJAX | e ) Message }
 foo = asClients api
